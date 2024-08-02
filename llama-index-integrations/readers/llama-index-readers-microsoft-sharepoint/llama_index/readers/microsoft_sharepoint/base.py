@@ -138,7 +138,7 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
         if hasattr(self, "_site_id_with_host_name"):
             return self._site_id_with_host_name
 
-        site_information_endpoint = f"https://graph.microsoft.com/v1.0/sites"
+        site_information_endpoint = f"https://graph.microsoft.com/v1.0/sites?search={sharepoint_site_name}"
 
         self._authorization_headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -194,7 +194,7 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
         if self.drive_id:
             return self.drive_id
 
-        self._drive_id_endpoint = f"https://graph.microsoft.com/v1.0/sites/{self._site_id_with_host_name}/drives"
+        self._drive_id_endpoint = f"https://graph.microsoft.com/v1.0/sites/{self._site_id_with_host_name}/drives?search={self.drive_name}"
 
         response = requests.get(
             url=self._drive_id_endpoint,
@@ -204,7 +204,7 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
         if response.status_code == 200 and "value" in response.json():
             if len(response.json()["value"]) > 0 and self.drive_name is not None:
                 for drive in response.json()["value"]:
-                    if drive["name"].lower() == self.drive_name.lower():
+                    if "name" in drive and drive["name"].lower() == self.drive_name.lower():
                         return drive["id"]
                 raise ValueError(f"The specified drive {self.drive_name} is not found.")
 
@@ -268,12 +268,15 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
         files_path = self.list_resources(
             sharepoint_site_name=self.sharepoint_site_name,
             sharepoint_folder_id=folder_id,
+            recursive=include_subfolders
         )
 
         metadata = {}
 
         for file_path in files_path:
             item = self._get_item_from_path(file_path)
+            if "name" not in item:
+                continue
             metadata.update(self._download_file(item, download_dir))
 
         return metadata
@@ -591,14 +594,14 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
         items = response.json().get("value", [])
         file_paths = []
         for item in items:
-            if "folder" in item and recursive:
+            if "folder" in item and "name" in item and "id" in item and recursive:
                 # Recursive call for subfolder
                 subfolder_id = item["id"]
                 subfolder_paths = self._list_folder_contents(
                     subfolder_id, recursive, os.path.join(current_path, item["name"])
                 )
                 file_paths.extend(subfolder_paths)
-            elif "file" in item:
+            elif "file" in item and "name" in item:
                 # Append file path
                 file_path = Path(os.path.join(current_path, item["name"]))
                 file_paths.append(file_path)
@@ -623,13 +626,13 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
 
         file_paths = []
         for item in items:
-            if "folder" in item:
+            if "folder" in item and "name" in item and "id" in item:
                 # Append folder path
                 folder_paths = self._list_folder_contents(
                     item["id"], recursive=True, current_path=item["name"]
                 )
                 file_paths.extend(folder_paths)
-            elif "file" in item:
+            elif "file" in item and "name" in item:
                 # Append file path
                 file_path = Path(item["name"])
                 file_paths.append(file_path)
