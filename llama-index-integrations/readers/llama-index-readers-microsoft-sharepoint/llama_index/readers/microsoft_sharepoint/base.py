@@ -194,9 +194,9 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
         if self.drive_id:
             return self.drive_id
 
-
+        endpoint = f"https://graph.microsoft.com/v1.0/sites/{self._site_id_with_host_name}/drives?search={self.drive_name}"
         response = requests.get(
-            url=self._drive_id_endpoint,
+            url=endpoint,
             headers=self._authorization_headers,
         )
         drive_id = None
