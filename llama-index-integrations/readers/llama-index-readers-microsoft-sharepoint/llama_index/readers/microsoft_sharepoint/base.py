@@ -194,31 +194,29 @@ class SharePointReader(BasePydanticReader, ResourcesReaderMixin, FileSystemReade
         if self.drive_id:
             return self.drive_id
 
-        endpoint = f"https://graph.microsoft.com/v1.0/sites/{self._site_id_with_host_name}/drives?search={self.drive_name}"
+        self._drive_id_endpoint = f"https://graph.microsoft.com/v1.0/sites/{self._site_id_with_host_name}/drives"
+
         response = requests.get(
-            url=endpoint,
+            url=self._drive_id_endpoint+'?search={self.drive_name}',
             headers=self._authorization_headers,
         )
-        drive_id = None
+
         if response.status_code == 200 and "value" in response.json():
             if len(response.json()["value"]) > 0 and self.drive_name is not None:
                 for drive in response.json()["value"]:
                     if "name" in drive and drive["name"].lower() == self.drive_name.lower():
-                        drive_id = drive["id"]
-                        break
-            elif (
+                        return drive["id"]
+                raise ValueError(f"The specified drive {self.drive_name} is not found.")
+
+            if (
                 len(response.json()["value"]) > 0
                 and "id" in response.json()["value"][0]
             ):
-                drive_id = response.json()["value"][0]["id"]
+                return response.json()["value"][0]["id"]
             else:
                 raise ValueError(
                     "Error occurred while fetching the drives for the sharepoint site."
                 )
-            if drive_id is None:
-                raise ValueError(f"The specified drive {self.drive_name} is not found.")
-            self._drive_id_endpoint = f"https://graph.microsoft.com/v1.0/sites/{self._site_id_with_host_name}/drives/{drive_id}"
-            return drive_id
         else:
             logger.error(response.json()["error"])
             raise ValueError(response.json()["error_description"])
